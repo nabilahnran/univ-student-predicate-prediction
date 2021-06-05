@@ -1,0 +1,162 @@
+---
+title: "TubesFSD_18523160_18523252 Prediksi Ketepatan Kelulusan Mahasiswa Berdasarkan IP"
+author: "Salsabila, Nabilah Nuur Ainii"
+date: "12/19/2020"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r}
+library('caret')
+library('ggplot2')
+library('e1071')
+```
+Package caret sangat membantu karena package ini menyediakan akses langsung ke berbagai macam fungsi untuk mentraining model kita dengan berbagai macam variasi algoritma machine learning seperti SVM, KNN, pohon keputusan, regresi linear, dan lain lain.
+Package ggplot2 adalah package yang sangat membantu dalam hal memvisualisasikan data yang ada seperti ploting data.
+```{r}
+data<- read.csv('/Users/nabilahnran/Downloads/data_lulus_tepat_waktu.csv')
+```
+Kami akan memprediksi ketepatan kelulusan kuliah dengan memakai metode SVM (Support Vector Machine) dengan memakai sebuah dataset dari Kaggle berjudul 'On Time Graduation Classification' (https://www.kaggle.com/oddyvirgantara/on-time-graduation-classification). Disini dataset kami masukan ke variabel 'data'
+```{r}
+data
+```
+Dataset ini memiliki 4 fitur yaitu IP semester 1, IP semester2, IP semester 3, dan IP semester 4. Data ini juga memiliki 2 kelas yaitu kelas Ya dan Tidak dalam hal ketepatan kelulusan. kami akan menggunakan variabel tepat untuk memprediksi.
+```{r}
+nrow(data)
+```
+Dataset ini memilik data sebanyak 1687, dihitung dari barisnya.
+```{r}
+str(data)
+```
+Dataset ini bersifat numerikal. Selayaknya nilai IP, nilai pada fitur IP tidak kurang dari 0 dan tidak lebih dari 4 dan angkanya desimal. Pada kelas tepat difaktorkan sehingga, data yang tepat (Ya) disimbolkan dengan 1 dan data yang memiliki kelas tidak tepat (Tidak) disimbolkan dengan 0 untuk melihat visualisasi sebaran datanya.
+```{r}
+summary(data)
+```
+Pada fitur ip1, nilai terendah pada datanya bernilai 0.830 dan nilai tertingginya adalah 3.860. Ip2 memiliki nilai terendah bernilai 0.230 dan nilai tertinggi 4.000. Sedangkan pada ip3 nilai terendahnya adalah 0.55 dan nilai tertingginya 3.92. Lalu, ip4 memiliki nilai tertinggi 0.9000 dan nilai terendah 3.910. Sedangkan pada kolom tepat yang memiliki 2 kelas, data yang termasuk pada kelas 'Tidak' sebanyak 135 dan data yang termasuk kelas 'Ya' memiliki jumlah data sebanyak 1552, selisih antara keduanya cukup banyak.
+```{r}
+anyNA(data)
+```
+dengan fungsi ini kita akan mengecek apakah ada data null pada data kami. Hasilnya adalah FALSE, artinya tidak ada data yang bernilai null atau missing values pada data 'data'.
+```{r}
+plot(data,col = ifelse(data$tepat=="Ya", "blue", "red"), pch=19)
+```
+Dataset diplot per baris x kolom. karena dataset memiliki 5 kolom, maka akan tertampil sebanyak 25 plot (baris 1 kolom 2 adalah plot dari variabel ip1 dan ip2, begitu seterusnya hingga baris 5 kolom 4 yaitu plot dari variabel ip4 dengan ketepatan kelulusan). Data berwarna biru adalah data angka yang memiliki kelas tepat waktu (Ya), dan berwarna merah adalah data yang memiliki kelas tidak tepat waktu (Tidak). Terlihat bahwa data yang memiliki kelas 'Ya' memiliki jumlah yang lebih dominan dibandingkan kelas 'Tidak'. Dalam persebarannya, data terlampau tercampur secara acak pada plot antara fitur, sedangkan plot antara fitur dan kelas terbagi menjadi 2 bagian karena terbagi hanya pada 2 kelas.
+```{r}
+table(data$tepat)
+```
+Untuk frekuensi pada kelas 'Ya' dan 'Tidak', terlihat bahwa jumlah data pada dua kelas tersebut selisihnya sangat jauh, perbedaannya hampir 1:12. Sama seperti pada plot sebelumnya dimana data berwarna biru lebih dominan daripada data berwarna merah.
+```{r}
+library('ROSE')
+```
+Oleh karena itu, kami melakukan resampling guna merubah frekuensinya. disini kami menginstall package ROSE untuk memakai fungsi ovun.sample yang berfungsi untuk meresampling data.
+```{r}
+data_balanced<- ovun.sample(tepat ~ ., data = data, method = "over",N = 3104)$data
+table(data_balanced$tepat)
+```
+Pada resampling ini kami menggunakan metode random oversampling dimana metode ini akan menduplikasi data yang ada di kelas minoritas sehingga frekuensinya naik.
+Dengan fungsi ovun.sample, kami meresapling fitur tepat, dari data awal bernama data, dengan mengisi method dengan 'over' untuk oversampling, dan variabel N untuk jumlah observasi dalam hasil data yang seimbang. Pada data awal, kami memiliki jumlah 1552 pada data 'Ya' yang mayoritas, maka kami memberikan instruksi untuk oversample kelas minoritas sampai dia mencapai 1552 yang jumlahnya menjadi setara, maka nilai N kami isi dengan 1552 x 2 yaitu 3104. Maka hasilnya dapat dilihat jumlah data pada kedua kelas sudah sama, 1552. Data yang sudah di resampling ini kemudian dimasukkan didalam variabel data_balannced yang kemudian akan dipakai untuk langkah langkah selanjutnya.
+```{r}
+write.csv(data_balanced,'data_balanced.csv')
+dataa<- read.csv('/Users/nabilahnran/Documents/KULYEAH/TUGAS DAN MATERI/SMT 5/FSD/data_balanced.csv')
+dataa
+```
+disini kami memasukkan data yang sudah di resampling ke csv baru agar nilainya tidak berubah rubah.
+```{r}
+dataa <- dataa[,-1]
+dataa
+```
+disini kolom 1 pada dataset dataa dihapus karena merupakan kolom yg otomatis ditambah setelah resampling, kami hapus karena mungkin dapat merubah hasil training maupun test.
+```{r}
+intrain <- createDataPartition(y = dataa$tepat, p= 0.8, list = FALSE)
+```
+Variabel intrain ini berisi data yang telah displit oleh fungsi createDataPartition. Parameter y mengambil value dari variabel bergantung pada data mana yang akan dibagi. pada kasus kami, kami akan membagi berdasarkan data dataa$tepat. Parameter p menentukan presentase (dalam range 0-1) dalam pembagiannya. Kami ingin membagi data dengan rasio 80:20. Parameter list untuk me return sebuah list atau matriks. Kami mengisi FALSE  untuk tidak mengembalikan sebuah list atau matriks. Intrain memiliki data yang 80%.
+```{r}
+training <- dataa[intrain,]
+```
+variabel training yang akan kita gunakan untuk menampung data yang akan digunakan untuk training, diisi dengan data yang telah dimasukkan ke variabel intrain yang mana berjumlah 80% dari data pada dataset dataa.
+```{r}
+testing <- dataa[-intrain,]
+```
+variabel testing yang akan kita gunakan untuk menampung data yang akan digunakan untuk testing, diisi dengan data selain data yang dimasukkan ke variabel intrain, yang mana berjumlah 20% dari data pada dataset dataa.
+```{r}
+dim(training)
+```
+dimensi dari data training (80% dari data_ awal_balanced), yaitu 2484 row dan 5 column.
+```{r}
+dim(testing)
+```
+dimensi dari data testing (20% dari data_balanced), yaitu 620 row dan 5 column.
+```{r}
+training[["tepat"]] = factor(training[["tepat"]])
+```
+karena kolom 'tepat' yang akan dijadikan target, code diatas dapat merubah training data frame kolom 'tepat' menjadi variabel faktor.
+```{r}
+trctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 3)
+```
+Method trainControl() akan mengontrol semua komputasi overhead sehingga kita dapat memakai fungsi train() yang disediakan oleh package caret. training method akan melatih data kami pada alogoritma yang berbeda beda. hasil dari metod ini akan kami simpan pada variabel trctrl.
+Parameter 'method' menentukan method apa yang dipakai untuk resampling, kami menggunakan salah satu method cross validation. Langkah ini merupakan salah satu metode cross validation yaitu dengan repeated K-fold cross validation yang diulang beberapa kali.
+Parameter 'number' yang menetapkan jumlah perulangan resamplingnya.
+Parameter 'reapeats' berisi jumlah set untuk repeated cross validation kami.
+Method trainControl ini akan mengembalikan sebuah list. kami akan passing list ini ke method train().
+```{r}
+svm_Linear <- train(tepat ~., data = training, method = "svmLinear",
+                    trControl=trctrl,
+                    preProcess = c("center", "scale"),
+                    tuneLength = 10);
+```
+Method train() disimpan dengan parameter method 'svmLinear' karena kami menggunakan metode SVM. kami mengirim variabel target 'tepat'.
+'tepat~.' menunjukkan sebuah formula untuk memakai semua atribut yang ada pada classifier dan variabel tepat sebagai variabel target. 
+Parameter 'data' menentukan data mana yang akan dipakai untuk training, disini kami memakai data training yang sudah dimasukkan ke variabel training sebelumnya.
+Parameter trCrntrol mendapatkan hasil dari method trainControl() sebelumnya dengan mengambil variabel trctrl.
+Parameter 'preProcess' untuk preprocessing data training kami. kami menempatkan 2 value pada parameter preProcess yaitu 'center' dan 'scale', dua value ini membantu untuk memusatkan dan mengatur skala data
+Setelah preprocessing, fungsi ini menkonversi data training dengan nilai mean 0 dan standar deviasi 1. Parameter 'tuneLength' yang berisi integer dipakai untuk mengontrol jumlah kombinasi.
+```{r}
+svm_Linear
+```
+Hasil dari metode train(). Ini adalah model linear yang dilatih dengan value C = 1. C atau Cost adalah sebuah nilai yang digunakan untuk mengontrol tingkat kesalahan klasifikasi pada data yang dilatih. Semakin besar nilai cost, semakin kecil kesalahan klasifikasi. Pada hasil diatas, hasil cost kecil.
+dari 2484 sampel, model ini sesuai dengan kasus yang akan dipredict.
+```{r}
+test_pred <- predict(svm_Linear, newdata = testing)
+```
+Setelah training, sekarang data test siap untuk di prediksi. package caret menyiapkan method predict() untuk memprediksi hasil. Parameter pertama adalah model yang telah dilatih, dan parameter kedua adalah parameter 'newdata' yang diisi dengandata frame testing, yang sudah dimasukan sebelumnya dalam variabel testing. Method predict() mengembalikan sebuah list, yang kami simpan dalam variabel test_pred.
+```{r}
+test_pred
+```
+Ini adalah hasil prediksi dari data testing. Berisi data kelas 'Ya' dan 'Tidak' yang urutannya random, jumlah setiap kelasnya tidak terlihat terlalu dominan disalah satunya. Selanjutnya adalah mengecek akurasi dari model.
+
+```{r}
+confusionMatrix(table(test_pred, testing$tepat))
+```
+Outputnya menunjukkan bahwa dimana jumlah akurasinya tidak terlalu tinggi dilihat juga dari matriks jumlah data test_pred di bagian atas. Dengan urutan yang sama dengan sebelumnya, kami juga akan membuat model svmLinear Classifier.
+```{r}
+grid <- expand.grid(C = c(0,0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2,5))
+svm_Linear_Grid <- train(tepat ~., data = training, method = "svmLinear",
+                         trControl=trctrl,
+                         preProcess = c("center", "scale"),
+                         tuneGrid = grid,
+                         tuneLength = 10)
+```
+Kami melakukan customization untuk memilih value C (cost) di linear classifier. Ini dilakukan dengan memasukkan nilai di grid. Disini kami membuat dan mengatur sebuah SVM classifier dengan nilai cost yang berbeda beda. Kami menempatkan beberapa nilai C menggunakan fungsi expand.grid() kedalam dataframe grid. Selanjutnya, datafarame ini digunakan untuk mengetes classifier pada nilai C yang spesifik dengan menggunakan method train() dengan parameter tuneGrid.
+```{r}
+svm_Linear_Grid
+```
+Masih dengan 2484 sampel, ditampilkan nilai C dan pasangan akurasinya. Tidak jauh jumlah nilai akurasi setiap nilai C nya, hasil akurasi tiap nilai C nya hanya mempunyai selisih yang sangat kecil dan nilai yang digunakan untuk modelnya adalah nilai C yang memiliki nilai akurasi yang paling tinggi. Model ini sesuai dengan kasus yang akan dipredict, walaupun tidak memiliki akurasi yang sangat tinggi.
+```{r}
+plot(svm_Linear_Grid)
+```
+Sebagaimana yang telah dijelaskan dilangkah sebelumnya, disini ditampilkan visualisasi relasi nilai C (cost) dengan akurasinya yang paling tinggi adalah pada nilai cost final yang berada di puncak tertinggi pada grafik. 
+```{r}
+test_pred_grid <- predict(svm_Linear_Grid, newdata = testing)
+```
+Dengan hasil model sebelumnya dan dengan data testing, kami melakukan prediksi dan disimpan dalam variabel test_pred_grid.
+```{r}
+test_pred_grid
+```
+Ini adalah hasil prediksi dari data testing dengan metode svm_Linear_Grid. Berisi data kelas 'Ya' dan 'Tidak' yang urutannya random, jumlah setiap kelasnya tidak terlihat terlalu dominan disalah satunya. Selanjutnya adalah mengecek akurasi dari model.
+```{r}
+confusionMatrix(table(test_pred_grid, testing$tepat))
+```
+Hasil dari confussion matrix menampilkan bahwa akurasi model ini berbeda dengan akurasi pada model sebelumnya, namun hasil akurasinya pun tidak berbeda sangat jauh. Dengan hasil akurasi menggunakan svm dari 2 model diatas, menjelaskan bahwa prediksi pada data ini menggunakan metode SVM adalah hal yang bisa dilakukan, namun mungkin hasilnya tidak terlalu bagus.
+Studi sebelumnya yang relevan dengan kasus ini, salah satunya dengan tujuan prediksi yang sama hanya saja menggunakan metode Random Forest, studi tersebut menemukan bahwa akurasi dengan data ini dan metode random forest adalah hampir sempurna yaitu 98%. mungkin memang, menggunakan metode random forest lebih sesuai dengan kasus ini karena metode random forest mampu mengklasifiksi data yang memiliki atribut yang tidak lengkap,dapat digunakan untuk klasifikasi dan dengan jumlah data yang banyak
+
